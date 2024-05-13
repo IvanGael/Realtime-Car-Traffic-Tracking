@@ -7,7 +7,7 @@ import time
 
 # Handling command line arguments
 if len(sys.argv) < 2:
-    print("Usage: python yolo_tracking.py <video_path>")
+    print("Usage: py main.py <video_path>")
     sys.exit(1)
 video_path = sys.argv[1]  # Get video path from command line argument
 
