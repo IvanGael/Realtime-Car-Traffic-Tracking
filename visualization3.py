@@ -7,8 +7,9 @@ import time
 
 # Handling command line arguments
 if len(sys.argv) < 2:
-    print("Usage: py visualization2.py <video_path>")
+    print("Usage: python script.py <video_path>")
     sys.exit(1)
+
 video_path = sys.argv[1]  # Get video path from command line argument
 
 # Load the YOLOv8 model
@@ -17,11 +18,27 @@ model = YOLO('yolov8n.pt')
 # Open the video file
 cap = cv2.VideoCapture(video_path)
 
+# Get video properties
+frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+# Create mask to divide road into two compartments
+def create_mask(width, height):
+    mask = np.zeros((height, width), dtype=np.uint8)
+    pts1 = np.array([[0, height//2], [width, height//2], [width, height], [0, height]], np.int32)
+    pts2 = np.array([[0, 0], [width, 0], [width, height//2], [0, height//2]], np.int32)
+    cv2.fillPoly(mask, [pts1], 1)
+    cv2.fillPoly(mask, [pts2], 2)
+    return mask
+
+mask = create_mask(frame_width, frame_height)
+
 # Store the track history
 track_history = defaultdict(lambda: [])
 
-# Store unique car IDs
-unique_car_ids = set()
+# Store unique car IDs for each compartment
+unique_car_ids_down = set()
+unique_car_ids_up = set()
 
 # Initialize list to store annotated frames
 annotated_frames = []
@@ -33,30 +50,33 @@ while cap.isOpened():
     success, frame = cap.read()
     if success:
         results = model.track(frame, persist=True)
-
         if results[0].boxes and results[0].boxes.id is not None:
             boxes = results[0].boxes.xywh.cpu()
             track_ids = results[0].boxes.id.int().cpu().tolist()
-
             annotated_frame = results[0].plot()
-
+            
             for box, track_id in zip(boxes, track_ids):
                 x, y, w, h = box
                 track = track_history[track_id]
                 track.append((float(x), float(y)))
                 if len(track) > 30:
                     track.pop(0)
-
                 points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
                 cv2.polylines(annotated_frame, [points], isClosed=False, color=(255,20,147), thickness=10)
                 
-                # Add track ID to unique car IDs set
-                unique_car_ids.add(track_id)
+                # Check which compartment the vehicle is in
+                compartment = mask[int(y), int(x)]
+                if compartment == 1:
+                    unique_car_ids_down.add(track_id)
+                elif compartment == 2:
+                    unique_car_ids_up.add(track_id)
             
             # Display car count on the frame
-            car_count_text = f"{len(unique_car_ids)} vehicles"
-            cv2.putText(annotated_frame, car_count_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
-
+            down_count_text = f"Left Lane: {len(unique_car_ids_down)} vehicles"
+            up_count_text = f"Rigth Lane: {len(unique_car_ids_up)} vehicles"
+            cv2.putText(annotated_frame, down_count_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
+            cv2.putText(annotated_frame, up_count_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
+            
             annotated_frames.append(annotated_frame)
             
             # Display frame in OpenCV GUI
@@ -65,11 +85,10 @@ while cap.isOpened():
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break  # Break the loop if 'q' is pressed
-
+            
             # Check if 2 minutes have elapsed
             if time.time() - start_time >= 120:
                 break
-                
     else:
         break
 
@@ -82,8 +101,10 @@ frame_rate = 30  # Set frame rate
 frame_size = (annotated_frames[0].shape[1], annotated_frames[0].shape[0])  # Use first frame's size
 output_video_path = video_path.split('.')[0] + '_tracked.mp4'  # Output file name with '_tracked' suffix
 out = cv2.VideoWriter(output_video_path, fourcc, frame_rate, frame_size)
+
 for frame in annotated_frames:
     out.write(frame)
+
 out.release()
 
 # Close all OpenCV windows
