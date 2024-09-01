@@ -46,9 +46,24 @@ annotated_frames = []
 # Start time for tracking
 start_time = time.time()
 
+# Variables for FPS calculation
+frame_count = 0
+fps = 0
+fps_update_interval = 1  # Update FPS every second
+last_fps_update = start_time
+
 while cap.isOpened():
     success, frame = cap.read()
     if success:
+        # FPS calculation
+        frame_count += 1
+        current_time = time.time()
+        elapsed_time = current_time - last_fps_update
+        if elapsed_time > fps_update_interval:
+            fps = frame_count / elapsed_time
+            frame_count = 0
+            last_fps_update = current_time
+
         results = model.track(frame, persist=True)
         if results[0].boxes and results[0].boxes.id is not None:
             boxes = results[0].boxes.xywh.cpu()
@@ -71,11 +86,13 @@ while cap.isOpened():
                 elif compartment == 2:
                     unique_car_ids_up.add(track_id)
             
-            # Display car count on the frame
+            # Display car count and FPS on the frame
             down_count_text = f"Left Lane: {len(unique_car_ids_down)} vehicles"
-            up_count_text = f"Rigth Lane: {len(unique_car_ids_up)} vehicles"
+            up_count_text = f"Right Lane: {len(unique_car_ids_up)} vehicles"
+            fps_text = f"FPS: {fps:.2f}"
             cv2.putText(annotated_frame, down_count_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
             cv2.putText(annotated_frame, up_count_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
+            cv2.putText(annotated_frame, fps_text, (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
             
             annotated_frames.append(annotated_frame)
             

@@ -9,6 +9,7 @@ import time
 if len(sys.argv) < 2:
     print("Usage: py visualization2.py <video_path>")
     sys.exit(1)
+
 video_path = sys.argv[1]  # Get video path from command line argument
 
 # Load the YOLOv8 model
@@ -29,24 +30,36 @@ annotated_frames = []
 # Start time for tracking
 start_time = time.time()
 
+# Variables for FPS calculation
+frame_count = 0
+fps = 0
+fps_update_interval = 1  # Update FPS every second
+last_fps_update = time.time()
+
 while cap.isOpened():
     success, frame = cap.read()
     if success:
-        results = model.track(frame, persist=True)
+        # Increment frame count
+        frame_count += 1
+        
+        # Calculate FPS
+        current_time = time.time()
+        if current_time - last_fps_update >= fps_update_interval:
+            fps = frame_count / (current_time - last_fps_update)
+            frame_count = 0
+            last_fps_update = current_time
 
+        results = model.track(frame, persist=True)
         if results[0].boxes and results[0].boxes.id is not None:
             boxes = results[0].boxes.xywh.cpu()
             track_ids = results[0].boxes.id.int().cpu().tolist()
-
             annotated_frame = results[0].plot()
-
             for box, track_id in zip(boxes, track_ids):
                 x, y, w, h = box
                 track = track_history[track_id]
                 track.append((float(x), float(y)))
                 if len(track) > 30:
                     track.pop(0)
-
                 points = np.hstack(track).astype(np.int32).reshape((-1, 1, 2))
                 cv2.polylines(annotated_frame, [points], isClosed=False, color=(255,20,147), thickness=10)
                 
@@ -56,7 +69,11 @@ while cap.isOpened():
             # Display car count on the frame
             car_count_text = f"{len(unique_car_ids)} vehicles"
             cv2.putText(annotated_frame, car_count_text, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
-
+            
+            # Display FPS on the frame
+            fps_text = f"FPS: {fps:.2f}"
+            cv2.putText(annotated_frame, fps_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (194, 247, 50), 3)
+            
             annotated_frames.append(annotated_frame)
             
             # Display frame in OpenCV GUI
@@ -65,7 +82,6 @@ while cap.isOpened():
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
                 break  # Break the loop if 'q' is pressed
-
             # Check if 2 minutes have elapsed
             if time.time() - start_time >= 120:
                 break
