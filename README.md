@@ -23,5 +23,6 @@ Realtime vehicle traffic tracking using yolov8 model
 py visualization1.py video_path
 py visualization2.py video_path
 py visualization3.py video_path
+py visualization4.py video_path
 ```
 
