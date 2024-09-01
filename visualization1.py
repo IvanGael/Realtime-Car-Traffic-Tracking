@@ -50,6 +50,7 @@ while cap.isOpened():
             annotated_frames.append(annotated_frame)
             
             # Display frame in OpenCV GUI
+            cv2.namedWindow('Frame', cv2.WINDOW_NORMAL)
             cv2.imshow('Frame', annotated_frame)
             key = cv2.waitKey(1) & 0xFF
             if key == ord('q'):
